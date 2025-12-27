@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from workflow.meeting_analyzer_v3 import MeetingAnalyzerV3
+from database.mysql_client import MySQLClient
 from utils.config import settings
 from utils.logger import setup_logging
 
@@ -39,6 +40,7 @@ app.add_middleware(
 
 # グローバル変数
 meeting_analyzers: Dict[str, MeetingAnalyzerV3] = {}
+mysql_client = MySQLClient()
 
 
 @app.get("/")
