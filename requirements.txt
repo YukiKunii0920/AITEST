@@ -31,3 +31,8 @@ openai==1.54.5
 
 # Additional utilities
 tenacity==8.2.3
+
+# RAGとベクトルデータベース
+chromadb>=0.4.0
+langchain-community>=0.0.10
+sentence-transformers>=2.2.0
