@@ -125,6 +125,50 @@ class DatabaseManager:
             logger.error(f"Error saving transcript: {e}")
             return None
     
+    def update_meeting_status(
+        self,
+        meeting_id: int,
+        status: str,
+        end_time: Optional[datetime] = None
+    ) -> bool:
+        """
+        会議ステータスを更新
+        
+        Args:
+            meeting_id: 会議ID
+            status: ステータス（active, completed, error）
+            end_time: 終了時刻
+        
+        Returns:
+            bool: 更新成功かどうか
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    if end_time:
+                        cursor.execute(
+                            """
+                            UPDATE meetings
+                            SET status = %s, end_time = %s
+                            WHERE id = %s
+                            """,
+                            (status, end_time, meeting_id)
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            UPDATE meetings
+                            SET status = %s
+                            WHERE id = %s
+                            """,
+                            (status, meeting_id)
+                        )
+                    logger.info(f"Meeting status updated: id={meeting_id}, status={status}")
+                    return True
+        except Exception as e:
+            logger.error(f"Error updating meeting status: {e}")
+            return False
+    
     def save_agent_message(
         self,
         meeting_id: int,

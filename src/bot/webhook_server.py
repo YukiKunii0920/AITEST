@@ -12,6 +12,7 @@ from datetime import datetime
 import json
 
 from src.utils.database import db_manager
+from src.agents.meeting_analyzer import MeetingAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class WebhookHandler:
         self.participants: Dict[str, Dict[str, Any]] = {}
         self.bot_id: Optional[str] = None
         self.meeting_id: Optional[int] = None
+        self.meeting_analyzer: Optional[MeetingAnalyzer] = None
         logger.info("WebhookHandler initialized")
     
     def register_transcript_handler(self, handler: Callable):
@@ -87,10 +89,21 @@ class WebhookHandler:
                     text=text
                 )
         
+        # MeetingAnalyzerで分析（AIエージェントがアドバイスを投稿）
+        if self.meeting_analyzer:
+            try:
+                await self.meeting_analyzer.process_transcript(
+                    text=transcript_text,
+                    participant=participant,
+                    is_partial=is_partial
+                )
+            except Exception as e:
+                logger.error(f"Error in MeetingAnalyzer: {e}")
+        
         # 登録されたハンドラーを実行
         for handler in self.transcript_handlers:
             try:
-                await handler(text, participant, is_partial)
+                await handler(transcript_text, participant)
             except Exception as e:
                 logger.error(f"Error in transcript handler {handler.__name__}: {e}")
     
@@ -173,6 +186,15 @@ class WebhookHandler:
                 meeting_url = data.get("meeting_url", "")
                 self.meeting_id = db_manager.save_meeting(bot_id, meeting_url)
                 logger.info(f"Meeting created: id={self.meeting_id}, bot_id={bot_id}")
+            
+            # MeetingAnalyzerを初期化
+            if not self.meeting_analyzer:
+                self.meeting_analyzer = MeetingAnalyzer(
+                    bot_id=bot_id,
+                    min_transcript_count=3,  # 3発言で分析開始
+                    analysis_interval=5  # 5発言ごとに分析
+                )
+                logger.info(f"MeetingAnalyzer initialized for bot_id={bot_id}")
         
         logger.debug(f"Processing webhook event: {event_type}")
         
@@ -183,6 +205,11 @@ class WebhookHandler:
             await self.handle_participant_event(payload)
         elif event_type == "participant_events.chat_message":
             await self.handle_chat_event(payload)
+        elif event_type == "bot.leave":
+            # ボットが会議を離脱したときに会議ステータスを更新
+            if self.meeting_id:
+                db_manager.update_meeting_status(self.meeting_id, "completed", datetime.now())
+                logger.info(f"Meeting completed: id={self.meeting_id}")
         else:
             logger.debug(f"Unhandled event type: {event_type}")
     
