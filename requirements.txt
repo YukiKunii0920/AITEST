@@ -21,3 +21,13 @@ pytest-cov==4.1.0
 black==24.1.1
 flake8==7.0.0
 mypy==1.8.0
+
+# LangGraph and LLM
+langgraph==0.2.45
+langchain==0.3.7
+langchain-openai==0.2.9
+langchain-core==0.3.15
+openai==1.54.5
+
+# Additional utilities
+tenacity==8.2.3
