@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # OpenAI API設定
     openai_api_key: Optional[str] = None
     
+    # MySQL設定
+    mysql_host: str = "gateway01.ap-southeast-1.prod.aws.tidbcloud.com"
+    mysql_port: int = 4000
+    mysql_user: str = "3wjRdFsQqxjYNRi.root"
+    mysql_password: str = "kVeRDVvMfEEIZBzO"
+    mysql_database: str = "meeting_dashboard"
+    
     # ログ設定
     log_level: str = "INFO"
     log_file: str = "logs/bot.log"

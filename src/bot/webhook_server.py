@@ -7,9 +7,11 @@ Recall.aiからのリアルタイムイベント（文字起こし、参加者�
 
 import logging
 from fastapi import FastAPI, Request, HTTPException
-from typing import Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List, Optional
 from datetime import datetime
 import json
+
+from src.utils.database import db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ app = FastAPI(title="Meeting AI Agent Webhook Server")
 
 
 class WebhookHandler:
-    """Webhookイベントハンドラー"""
+    """ウェブフックイベントハンドラー"""
     
     def __init__(self):
         self.transcript_handlers: List[Callable] = []
@@ -25,6 +27,8 @@ class WebhookHandler:
         self.chat_handlers: List[Callable] = []
         self.transcripts: List[Dict[str, Any]] = []
         self.participants: Dict[str, Dict[str, Any]] = {}
+        self.bot_id: Optional[str] = None
+        self.meeting_id: Optional[int] = None
         logger.info("WebhookHandler initialized")
     
     def register_transcript_handler(self, handler: Callable):
@@ -74,6 +78,14 @@ class WebhookHandler:
                 "words": words
             }
             self.transcripts.append(transcript_entry)
+            
+            # MySQLに保存
+            if self.meeting_id:
+                db_manager.save_transcript(
+                    meeting_id=self.meeting_id,
+                    speaker_name=participant_name,
+                    text=text
+                )
         
         # 登録されたハンドラーを実行
         for handler in self.transcript_handlers:
@@ -144,6 +156,23 @@ class WebhookHandler:
         if not event_type:
             logger.warning("Received webhook without event type")
             return
+        
+        # bot_idを取得してmeeting_idを設定
+        data = payload.get("data", {})
+        bot_id = data.get("bot_id")
+        
+        if bot_id and bot_id != self.bot_id:
+            self.bot_id = bot_id
+            # 会議をデータベースから取得または作成
+            meeting = db_manager.get_meeting_by_bot_id(bot_id)
+            if meeting:
+                self.meeting_id = meeting['id']
+                logger.info(f"Meeting found: id={self.meeting_id}, bot_id={bot_id}")
+            else:
+                # 会議が存在しない場合は作成
+                meeting_url = data.get("meeting_url", "")
+                self.meeting_id = db_manager.save_meeting(bot_id, meeting_url)
+                logger.info(f"Meeting created: id={self.meeting_id}, bot_id={bot_id}")
         
         logger.debug(f"Processing webhook event: {event_type}")
         
@@ -220,6 +249,29 @@ async def get_transcript():
         "transcripts": webhook_handler.get_transcript_history(),
         "count": len(webhook_handler.get_transcript_history())
     }
+
+
+@app.post("/webhook/transcript")
+async def receive_transcript_webhook(request: Request):
+    """
+    Recall.aiからのリアルタイム文字起こしWebhookを受信
+    
+    このエンドポイントは、real_time_transcription.destination_urlとして使用されます。
+    """
+    try:
+        payload = await request.json()
+        logger.debug(f"Received transcript webhook: {json.dumps(payload, indent=2)}")
+        
+        # Webhookを処理
+        await webhook_handler.process_webhook(payload)
+        
+        return {"status": "ok"}
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON payload: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as e:
+        logger.error(f"Error processing transcript webhook: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_webhook_handler() -> WebhookHandler:
